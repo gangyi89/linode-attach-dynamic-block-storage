@@ -1,0 +1,15 @@
+# Copy this file to terraform.tfvars and fill in your values
+# terraform.tfvars is ignored by git for security
+
+linode_token = "your-linode-api-token-here"
+linode_region = "us-east"
+linode_type = "g6-nanode-1"
+root_pass = "your-secure-root-password-here"
+
+# Optional: Add your SSH public keys
+# ssh_keys = [
+#   "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ... user@host"
+# ]
+
+block_storage_size = 2
+block_storage_label = "dynamic-storage"

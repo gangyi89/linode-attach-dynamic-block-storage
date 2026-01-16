@@ -1,0 +1,46 @@
+# Copy this file to variables.tf and fill in your values
+
+variable "linode_token" {
+  description = "Linode API Personal Access Token"
+  type        = string
+  sensitive   = true
+  # Set this in terraform.tfvars or export TF_VAR_linode_token
+}
+
+variable "linode_region" {
+  description = "Linode region"
+  type        = string
+  default     = "us-east"
+}
+
+variable "linode_type" {
+  description = "Linode instance type"
+  type        = string
+  default     = "g6-nanode-1"
+}
+
+variable "root_pass" {
+  description = "Root password for the Linode instance"
+  type        = string
+  sensitive   = true
+  # Set this in terraform.tfvars or export TF_VAR_root_pass
+}
+
+variable "ssh_keys" {
+  description = "SSH public keys to add to the Linode instance"
+  type        = list(string)
+  default     = []
+  # Example: default = ["ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ..."]
+}
+
+variable "block_storage_size" {
+  description = "Size of block storage volume in GB"
+  type        = number
+  default     = 2
+}
+
+variable "block_storage_label" {
+  description = "Label for the block storage volume"
+  type        = string
+  default     = "dynamic-storage"
+}
