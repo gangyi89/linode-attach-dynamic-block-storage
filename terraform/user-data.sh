@@ -28,41 +28,42 @@ ATTACH_SCRIPT_EOF
 # Make script executable
 chmod +x /usr/local/bin/attach_block_storage.sh
 
-# Wait for network and instance to be fully ready
-sleep 30
+# Wait for network and metadata service to be ready
+sleep 10
 
-# Get Linode instance ID and Config ID from Linode API
-# Query by IP address or instance label pattern
-INSTANCE_IP=$(hostname -I | awk '{print $1}')
+# Get Linode instance ID from metadata service
+# First, get a metadata token
+METADATA_TOKEN=$(curl -s -X PUT -H "Metadata-Token-Expiry-Seconds: 3600" \
+    http://169.254.169.254/v1/token | jq -r '.token' 2>/dev/null || echo "")
 
-# Query Linode API to find this instance by IP
-INSTANCE_INFO=$(curl -s -H "Authorization: Bearer $LINODE_API_TOKEN" \
-    "https://api.linode.com/v4/linode/instances" | \
-    jq -r ".data[] | select(.ipv4[] | contains(\"$INSTANCE_IP\")) | {id: .id, label: .label}" 2>/dev/null | head -1)
-
-if [[ -z "$INSTANCE_INFO" ]]; then
-    # Try to get the most recent ubuntu-vm instance
-    INSTANCE_INFO=$(curl -s -H "Authorization: Bearer $LINODE_API_TOKEN" \
-        "https://api.linode.com/v4/linode/instances" | \
-        jq -r "[.data[] | select(.label | startswith(\"ubuntu-vm\"))] | sort_by(.created) | reverse | .[0] | {id: .id, label: .label}" 2>/dev/null)
+if [[ -z "$METADATA_TOKEN" ]]; then
+    echo "ERROR: Could not get metadata token. Retrying..." >> /var/log/block-storage-attach.log
+    sleep 10
+    METADATA_TOKEN=$(curl -s -X PUT -H "Metadata-Token-Expiry-Seconds: 3600" \
+        http://169.254.169.254/v1/token | jq -r '.token' 2>/dev/null || echo "")
 fi
 
-LINODE_ID=$(echo "$INSTANCE_INFO" | jq -r '.id' 2>/dev/null || echo "")
-
-if [[ -z "$LINODE_ID" ]]; then
-    echo "ERROR: Could not determine Linode ID. Will retry attachment later." >> /var/log/block-storage-attach.log
+if [[ -z "$METADATA_TOKEN" ]]; then
+    echo "ERROR: Failed to get metadata token after retry." >> /var/log/block-storage-attach.log
     exit 1
 fi
 
-# Get the config ID for this instance
-CONFIG_INFO=$(curl -s -H "Authorization: Bearer $LINODE_API_TOKEN" \
+# Get instance ID from metadata service
+LINODE_ID=$(curl -s -H "Metadata-Token: $METADATA_TOKEN" \
+    http://169.254.169.254/v1/instance | grep "^id:" | awk '{print $2}' 2>/dev/null || echo "")
+
+if [[ -z "$LINODE_ID" ]]; then
+    echo "ERROR: Could not determine Linode ID from metadata service." >> /var/log/block-storage-attach.log
+    exit 1
+fi
+
+# Get the config ID for this instance using the Linode API
+CONFIG_ID=$(curl -s -H "Authorization: Bearer $LINODE_API_TOKEN" \
     "https://api.linode.com/v4/linode/instances/$LINODE_ID/configs" | \
     jq -r '.data[0].id' 2>/dev/null || echo "")
 
-CONFIG_ID="$CONFIG_INFO"
-
 if [[ -z "$CONFIG_ID" ]]; then
-    echo "ERROR: Could not determine Config ID. Will retry attachment later." >> /var/log/block-storage-attach.log
+    echo "ERROR: Could not determine Config ID from Linode API." >> /var/log/block-storage-attach.log
     exit 1
 fi
 
