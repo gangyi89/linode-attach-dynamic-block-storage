@@ -79,13 +79,12 @@ resource "linode_instance" "ubuntu_vm" {
   authorized_keys = var.ssh_keys
 
   # Metadata for user-data script
-  # Pass linode_id, config_id, and volume_id directly from Terraform
+  # Note: linode_id and config_id will be queried by the user-data script
+  # since we can't self-reference the resource during creation
   metadata {
     user_data = base64encode(templatefile("${path.module}/user-data.sh", {
       attach_script     = local.attach_script
       volume_id        = linode_volume.block_storage.id
-      linode_id        = linode_instance.ubuntu_vm.id
-      config_id        = linode_instance.ubuntu_vm.config[0].id
       linode_api_token = var.linode_token
     }))
   }
@@ -107,7 +106,7 @@ output "linode_instance_label" {
 
 output "linode_instance_ip" {
   description = "Public IP address of the Linode instance"
-  value       = linode_instance.ubuntu_vm.ip_address
+  value       = linode_instance.ubuntu_vm.ipv4[0]
 }
 
 output "block_storage_volume_id" {

@@ -8,8 +8,6 @@ set -euo pipefail
 
 # Variables passed from Terraform
 VOLUME_ID="${volume_id}"
-LINODE_ID="${linode_id}"
-CONFIG_ID="${config_id}"
 LINODE_API_TOKEN="${linode_api_token}"
 
 # Install jq if not already installed
@@ -30,8 +28,43 @@ ATTACH_SCRIPT_EOF
 # Make script executable
 chmod +x /usr/local/bin/attach_block_storage.sh
 
-# Wait for network to be ready
-sleep 10
+# Wait for network and instance to be fully ready
+sleep 30
+
+# Get Linode instance ID and Config ID from Linode API
+# Query by IP address or instance label pattern
+INSTANCE_IP=$(hostname -I | awk '{print $1}')
+
+# Query Linode API to find this instance by IP
+INSTANCE_INFO=$(curl -s -H "Authorization: Bearer $LINODE_API_TOKEN" \
+    "https://api.linode.com/v4/linode/instances" | \
+    jq -r ".data[] | select(.ipv4[] | contains(\"$INSTANCE_IP\")) | {id: .id, label: .label}" 2>/dev/null | head -1)
+
+if [[ -z "$INSTANCE_INFO" ]]; then
+    # Try to get the most recent ubuntu-vm instance
+    INSTANCE_INFO=$(curl -s -H "Authorization: Bearer $LINODE_API_TOKEN" \
+        "https://api.linode.com/v4/linode/instances" | \
+        jq -r "[.data[] | select(.label | startswith(\"ubuntu-vm\"))] | sort_by(.created) | reverse | .[0] | {id: .id, label: .label}" 2>/dev/null)
+fi
+
+LINODE_ID=$(echo "$INSTANCE_INFO" | jq -r '.id' 2>/dev/null || echo "")
+
+if [[ -z "$LINODE_ID" ]]; then
+    echo "ERROR: Could not determine Linode ID. Will retry attachment later." >> /var/log/block-storage-attach.log
+    exit 1
+fi
+
+# Get the config ID for this instance
+CONFIG_INFO=$(curl -s -H "Authorization: Bearer $LINODE_API_TOKEN" \
+    "https://api.linode.com/v4/linode/instances/$LINODE_ID/configs" | \
+    jq -r '.data[0].id' 2>/dev/null || echo "")
+
+CONFIG_ID="$CONFIG_INFO"
+
+if [[ -z "$CONFIG_ID" ]]; then
+    echo "ERROR: Could not determine Config ID. Will retry attachment later." >> /var/log/block-storage-attach.log
+    exit 1
+fi
 
 # Attach the block storage volume
 /usr/local/bin/attach_block_storage.sh \
